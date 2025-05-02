@@ -1,0 +1,11 @@
+{
+    "levels": [
+        {
+            "number": 1,
+            "start_pos": [50, 600],
+            "obstacles": [[150,200]],
+            "goal": [500, 400],
+            "highscore": 0 
+        }
+    ]
+}
