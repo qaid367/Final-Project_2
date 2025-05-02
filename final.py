@@ -24,6 +24,32 @@ def level_info(num, info):
     
     return level[f"{info}"]
 
+obstacles = [*level_info(current_lvl, "obstacles")]
+
+def draw_obstacles():
+    for obstacle in obstacles:
+        X, Y = obstacle
+        obstacle = Obstacle(pygame.Vector2(X, Y))
+        obstacle.draw()
+
+class Obstacle:
+    def __init__(self, position):
+        self.position = position
+        self.body = pygame.Rect(self.position.x, self.position.y, 25, 25)
+        self.hit = False
+
+    def draw(self):
+        if self.hit == False:
+            self.body.x = self.position.x
+            self.body.y = self.position.y
+            pygame.draw.rect(screen, "Blue", self.body)
+
+    def hit(self):
+        self.hit = True
+    
+
+
+
 class Player:
     def __init__(self, level=1):
         self.starting_point = level_info(level, "start_pos")
@@ -31,6 +57,7 @@ class Player:
         self.velocity = pygame.Vector2(0, 0)  # Track movement speed
         self.rect = pygame.Rect(self.position.x, self.position.y, 50, 50)
         self.is_jumping = False
+        self.hearts = 3
     
     def draw(self):
         self.rect.x = self.position.x
@@ -52,6 +79,10 @@ class Player:
         self.position += self.velocity
         self.velocity.x = 0
 
+    def hit(self):
+        if self.hearts == 0:
+            print("Player died!")
+        self.hearts -= 1
 
     def update(self):
         # Apply gravity
@@ -92,6 +123,7 @@ while running:
     
     player.update() # gravity check to make sure user isn't floating
     player.draw()
+    draw_obstacles()
     # flip() the display to put your work on screen
     pygame.display.flip()
 
