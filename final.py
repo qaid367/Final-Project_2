@@ -11,45 +11,51 @@ clock = pygame.time.Clock()
 running = True
 dt = 0
 current_lvl = 0
-last_jumped = datetime(1990, 1, 1)
+# last_jumped = datetime(1990, 1, 1)
 
 with open("assets/levels.json", "r") as f:
     levels_json = json.load(f) # load entire json file into variable
 
 def level_info(num, info):
     level = levels_json["levels"][num - 1]
-    valid_info = ["start_pos", "obstacles", "goal"]
+    valid_info = ["start_pos", "obstacles", "goal", "ground"]
     if not (info in valid_info):
         return SyntaxError
     
     return level[f"{info}"]
 
 obstacles = [*level_info(current_lvl, "obstacles")]
+grounds = [*level_info(current_lvl, "ground")]
 
-def draw_obstacles():
+def draw_game():
+    for ground in grounds:
+        rect = pygame.Rect(*ground)
+        pygame.draw.rect(screen, "green", rect)
     for obstacle in obstacles:
-        X, Y = obstacle
-        obstacle = Obstacle(pygame.Vector2(X, Y))
-        obstacle.draw()
-
+            obstacle.draw()
+    
 class Obstacle:
     def __init__(self, position):
         self.position = position
         self.body = pygame.Rect(self.position.x, self.position.y, 25, 25)
-        self.hit = False
+        self.touched = False
 
     def draw(self):
-        if self.hit == False:
+        if self.touched == False:
             self.body.x = self.position.x
             self.body.y = self.position.y
             pygame.draw.rect(screen, "Blue", self.body)
 
     def hit(self):
-        self.hit = True
-    
+        self.touched = True
 
-
-
+#convert every obstacle array into a new class obj
+for obstacle in obstacles:
+        X, Y = obstacle
+        index = obstacles.index([X,Y])
+        obstacle = Obstacle(pygame.Vector2(X, Y))
+        obstacles[index] = obstacle
+        obstacle.draw()
 class Player:
     def __init__(self, level=1):
         self.starting_point = level_info(level, "start_pos")
@@ -80,22 +86,31 @@ class Player:
         self.velocity.x = 0
 
     def hit(self):
+        self.hearts -= 1
         if self.hearts == 0:
             print("Player died!")
-        self.hearts -= 1
+        print(f"Player hit! Hearts Left: {player.hearts}")
 
     def update(self):
-        # Apply gravity
+        # apply gravity velocity
         self.velocity.y += .6
-        # Update position
         self.position += self.velocity
+        # ground check 
+        # if self.position.y >= 720 - 50:
+        #     self.position.y = 720 - 50
+        #     self.velocity.y = 0
+        #     self.is_jumping = False
+        for ground in reversed(grounds):
+            # ground[0] = x_pos
+            # ground[1] = y_pos
+            # ground[2] = width
+            # ground[3] = height
 
-        # Simple ground check (adjust 720 to your ground level)
-        if self.position.y >= 720 - 50:
-            self.position.y = 720 - 50
-            self.velocity.y = 0
-            self.is_jumping = False
-
+            # make sure the ground can allow the user to stand
+            if self.position.y >= ground[1] - 50 and self.position.x >= ground[0] and self.position.x <= ground[0] + ground[2]:
+                self.position.y = ground[1] - 50
+                self.velocity.y = 0
+                self.is_jumping = False                
 
 
 player = Player()
@@ -123,13 +138,19 @@ while running:
     
     player.update() # gravity check to make sure user isn't floating
     player.draw()
-    draw_obstacles()
-    # flip() the display to put your work on screen
+    draw_game()
+
+    for obstacle in obstacles:
+        # if player rect touches obstacle and obstacle has not been hit
+        if player.rect.colliderect(obstacle.body) and not obstacle.touched:
+            # run hit methods
+            player.hit()
+            obstacle.hit()
+
+
+
     pygame.display.flip()
 
-    # limits FPS to 60
-    # dt is delta time in seconds since last frame, used for framerate-
-    # independent physics.
     dt = clock.tick(60) / 1000
 
 pygame.quit()
