@@ -11,6 +11,7 @@ clock = pygame.time.Clock()
 running = True
 dt = 0
 current_lvl = 0
+
 # last_jumped = datetime(1990, 1, 1)
 
 with open("assets/levels.json", "r") as f:
@@ -29,33 +30,15 @@ grounds = [*level_info(current_lvl, "ground")]
 
 def draw_game():
     for ground in grounds:
-        rect = pygame.Rect(*ground)
-        pygame.draw.rect(screen, "green", rect)
+        adjusted_ground = ground.copy()
+        adjusted_ground[0] -= camera_offset_x
+        rect = pygame.Rect(*adjusted_ground)
+        pygame.draw.rect(screen, "Green", rect)
+
     for obstacle in obstacles:
-            obstacle.draw()
-    
-class Obstacle:
-    def __init__(self, position):
-        self.position = position
-        self.body = pygame.Rect(self.position.x, self.position.y, 25, 25)
-        self.touched = False
+        if not obstacle.touched:
+            obstacle.draw() 
 
-    def draw(self):
-        if self.touched == False:
-            self.body.x = self.position.x
-            self.body.y = self.position.y
-            pygame.draw.rect(screen, "Blue", self.body)
-
-    def hit(self):
-        self.touched = True
-
-#convert every obstacle array into a new class obj
-for obstacle in obstacles:
-        X, Y = obstacle
-        index = obstacles.index([X,Y])
-        obstacle = Obstacle(pygame.Vector2(X, Y))
-        obstacles[index] = obstacle
-        obstacle.draw()
 class Player:
     def __init__(self, level=1):
         self.starting_point = level_info(level, "start_pos")
@@ -66,7 +49,7 @@ class Player:
         self.hearts = 3
     
     def draw(self):
-        self.rect.x = self.position.x
+        self.rect.x = self.position.x - camera_offset_x
         self.rect.y = self.position.y
         pygame.draw.rect(screen, "Red", self.rect)
 
@@ -76,12 +59,12 @@ class Player:
             self.is_jumping = True
 
     def move_right(self):
-        self.velocity.x += 5
+        self.velocity.x += 3
         self.position += self.velocity
         self.velocity.x = 0
 
     def move_left(self):
-        self.velocity.x -= 5
+        self.velocity.x -= 3
         self.position += self.velocity
         self.velocity.x = 0
 
@@ -96,29 +79,61 @@ class Player:
         self.velocity.y += .8
         self.position += self.velocity
         # check to see if not hitting land above
+
+        if self.position.x < 0:
+            self.position.x = 0
         
         # ground check 
         for ground in reversed(grounds):
-            # ground[0] = x_pos
-            # ground[1] = y_pos
-            # ground[2] = width
-            # ground[3] = height
+            ground_x = ground[0] - camera_offset_x  # adjust ground's x pos for current camera view
+            ground_y = ground[1]
+            ground_width = ground[2]
+            ground_height = ground[3]
 
             # this handles ground bottom physics, making sure user doesn't go through the bottom of ground
-            if (self.position.y - ground[1] <= 100 and self.position.y - ground[1] > 0) and ((self.position.x >= ground[0] - 50) and (self.position.x <= ground[0] + ground[2])):
+            if (self.position.y - ground_y <= 70 and self.position.y - ground_y > 0) and ((self.position.x >= ground_x - 50) and (self.position.x <= ground_x + ground_width)):
                 self.velocity.y = 0
-                self.position.y = ground[1] + ground[3]
+                self.position.y = ground_y + ground_height
 
             # make sure the ground can allow the user to stand
-            if (self.position.y >= ground[1] - 50 and self.position.y <= ground[1] + 50) and ((self.position.x >= ground[0] - 50) and (self.position.x <= ground[0] + ground[2])):
-                self.position.y = ground[1] - 50
+            if (self.position.y >= ground_y - 50 and self.position.y <= ground_y + 50) and ((self.position.x >= ground_x - 50) and (self.position.x <= ground_x + ground_width)):
+                self.position.y = ground_y - 50
                 self.velocity.y = 0
                 self.is_jumping = False                
 
-
 player = Player()
+camera_offset_x = max(0, player.position.x - screen.get_width() // 2)
+
+class Obstacle:
+    def __init__(self, position):
+        self.position = position
+        self.body = pygame.Rect(self.position.x, self.position.y, 25, 25)
+        self.touched = False
+
+    def draw(self):
+        if not self.touched:
+            adjusted_rect = self.body.copy()
+            adjusted_rect.x -= camera_offset_x
+            pygame.draw.rect(screen, "Black", adjusted_rect)
+
+    def hit(self):
+        self.touched = True
+
+#convert every obstacle array into a new class obj
+for obstacle in obstacles:
+        X, Y = obstacle
+        index = obstacles.index([X,Y])
+        obstacle = Obstacle(pygame.Vector2(X, Y))
+        obstacles[index] = obstacle
+        obstacle.draw()
 
 while running:
+    # At the TOP of your game loop (BEFORE movement/rendering):
+    camera_offset_x = player.position.x - screen.get_width() // 2
+    camera_offset_x = max(0, camera_offset_x)  # Prevent left-edge overscroll
+
+    # DEBUG: Print positions to verify sync
+    print(f"Player X: {player.position.x}, Camera Offset: {camera_offset_x}, Expected Offset: {player.position.x - screen.get_width() // 2}")
     # poll for events
     # pygame.QUIT event means the user clicked X to close your window
     for event in pygame.event.get():
@@ -130,6 +145,7 @@ while running:
 
     keys = pygame.key.get_pressed()
 
+
     if keys[pygame.K_w]:
         player.jump()
     if keys[pygame.K_d]:
@@ -139,15 +155,16 @@ while running:
     if keys[pygame.K_ESCAPE]:
         running = False
 
-    
     player.update() # gravity check to make sure user isn't floating
     player.draw()
     draw_game()
 
     for obstacle in obstacles:
-        # if player rect touches obstacle and obstacle has not been hit
-        if player.rect.colliderect(obstacle.body) and not obstacle.touched:
-            # run hit methods
+        # Create a temporary rect that accounts for camera offset
+        adjusted_obstacle_rect = obstacle.body.copy()
+        adjusted_obstacle_rect.x -= camera_offset_x
+        
+        if player.rect.colliderect(adjusted_obstacle_rect) and not obstacle.touched:
             player.hit()
             obstacle.hit()
 
