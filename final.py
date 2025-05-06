@@ -93,27 +93,31 @@ class Player:
 
     def update(self):
         # apply gravity velocity
-        self.velocity.y += .6
+        self.velocity.y += .8
         self.position += self.velocity
+        # check to see if not hitting land above
+        
         # ground check 
-        # if self.position.y >= 720 - 50:
-        #     self.position.y = 720 - 50
-        #     self.velocity.y = 0
-        #     self.is_jumping = False
         for ground in reversed(grounds):
             # ground[0] = x_pos
             # ground[1] = y_pos
             # ground[2] = width
             # ground[3] = height
 
+            # this handles ground bottom physics, making sure user doesn't go through the bottom of ground
+            if (self.position.y - ground[1] <= 100 and self.position.y - ground[1] > 0) and ((self.position.x >= ground[0] - 50) and (self.position.x <= ground[0] + ground[2])):
+                self.velocity.y = 0
+                self.position.y = ground[1] + ground[3]
+
             # make sure the ground can allow the user to stand
-            if self.position.y >= ground[1] - 50 and self.position.x >= ground[0] and self.position.x <= ground[0] + ground[2]:
+            if (self.position.y >= ground[1] - 50 and self.position.y <= ground[1] + 50) and ((self.position.x >= ground[0] - 50) and (self.position.x <= ground[0] + ground[2])):
                 self.position.y = ground[1] - 50
                 self.velocity.y = 0
                 self.is_jumping = False                
 
 
 player = Player()
+
 while running:
     # poll for events
     # pygame.QUIT event means the user clicked X to close your window
