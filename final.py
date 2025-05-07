@@ -75,31 +75,71 @@ class Player:
         print(f"Player hit! Hearts Left: {player.hearts}")
 
     def update(self):
-        # apply gravity velocity
-        self.velocity.y += .8
+        # apply gravity
+        self.velocity.y += 0.8
+        
+        # store previous position for collision checks
+        old_position = pygame.Vector2(self.position.x, self.position.y)
+        
+        # apply velocity to position
         self.position += self.velocity
-        # check to see if not hitting land above
-
+        
+        # boundary check (left side of world)
         if self.position.x < 0:
             self.position.x = 0
         
-        # ground check 
-        for ground in reversed(grounds):
-            ground_x = ground[0] - camera_offset_x  # adjust ground's x pos for current camera view
-            ground_y = ground[1]
-            ground_width = ground[2]
-            ground_height = ground[3]
+        # update rect position (world coordinates)
+        self.rect.x = self.position.x
+        self.rect.y = self.position.y
 
-            # this handles ground bottom physics, making sure user doesn't go through the bottom of ground
-            if (self.position.y - ground_y <= 70 and self.position.y - ground_y > 0) and ((self.position.x >= ground_x - 50) and (self.position.x <= ground_x + ground_width)):
-                self.velocity.y = 0
-                self.position.y = ground_y + ground_height
+        self.check_ground_collisions(old_position)
+        self.check_side_collisions(old_position)
 
-            # make sure the ground can allow the user to stand
-            if (self.position.y >= ground_y - 50 and self.position.y <= ground_y + 50) and ((self.position.x >= ground_x - 50) and (self.position.x <= ground_x + ground_width)):
-                self.position.y = ground_y - 50
+        self.velocity.x = 0
+
+
+    def check_ground_collisions(self, old_position):
+        # Ground check (same as before but cleaned up)
+        for ground in grounds:
+            ground_rect = pygame.Rect(*ground)
+            
+            # standing on ground logic
+            if (self.rect.bottom >= ground_rect.top and 
+                old_position.y + self.rect.height <= ground_rect.top and
+                self.rect.right > ground_rect.left and 
+                self.rect.left < ground_rect.right):
+                self.position.y = ground_rect.top - self.rect.height
                 self.velocity.y = 0
-                self.is_jumping = False                
+                self.is_jumping = False
+            
+            # hitting ground from below logic
+            elif (self.rect.top <= ground_rect.bottom and 
+                  old_position.y >= ground_rect.bottom and
+                  self.rect.right > ground_rect.left and 
+                  self.rect.left < ground_rect.right):
+                self.position.y = ground_rect.bottom
+                self.velocity.y = 0
+
+    def check_side_collisions(self, old_position):
+        # Side collision check with ground
+        for ground in grounds:
+            ground_rect = pygame.Rect(*ground)
+            
+            # Moving right into a wall
+            if (self.velocity.x > 0 and  # Moving right
+                self.rect.left < ground_rect.right and
+                old_position.x + self.rect.width <= ground_rect.left and  # Wasn't colliding before
+                self.rect.bottom > ground_rect.top + 5 and  # Only collide if not just "grazing"
+                self.rect.top < ground_rect.bottom - 5):
+                self.position.x = ground_rect.left - self.rect.width
+            
+            # Moving left into a wall
+            elif (self.velocity.x < 0 and  # Moving left
+                  self.rect.right > ground_rect.left and
+                  old_position.x >= ground_rect.right and  # Wasn't colliding before
+                  self.rect.bottom > ground_rect.top + 5 and
+                  self.rect.top < ground_rect.bottom - 5):
+                self.position.x = ground_rect.right
 
 player = Player()
 camera_offset_x = max(0, player.position.x - screen.get_width() // 2)
@@ -132,8 +172,6 @@ while running:
     camera_offset_x = player.position.x - screen.get_width() // 2
     camera_offset_x = max(0, camera_offset_x)  # Prevent left-edge overscroll
 
-    # DEBUG: Print positions to verify sync
-    print(f"Player X: {player.position.x}, Camera Offset: {camera_offset_x}, Expected Offset: {player.position.x - screen.get_width() // 2}")
     # poll for events
     # pygame.QUIT event means the user clicked X to close your window
     for event in pygame.event.get():
