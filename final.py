@@ -12,8 +12,6 @@ running = True
 dt = 0
 current_lvl = 0
 
-# last_jumped = datetime(1990, 1, 1)
-
 with open("assets/levels.json", "r") as f:
     levels_json = json.load(f) # load entire json file into variable
 
@@ -43,18 +41,23 @@ class Player:
     def __init__(self, level=1):
         self.starting_point = level_info(level, "start_pos")
         self.position = pygame.Vector2(*self.starting_point)
-        self.velocity = pygame.Vector2(0, 0)  # Track movement speed
-        self.rect = pygame.Rect(self.position.x, self.position.y, 50, 50)
+        self.velocity = pygame.Vector2(0, 0)
+        self.width, self.height = 50, 50
+        self.rect = pygame.Rect(0, 0, self.width, self.height) 
         self.is_jumping = False
         self.hearts = 3
     
     def draw(self):
-        self.rect.x = self.position.x - camera_offset_x
-        self.rect.y = self.position.y
-        pygame.draw.rect(screen, "Red", self.rect)
+        draw_rect = pygame.Rect(
+            self.position.x - camera_offset_x,
+            self.position.y,
+            self.width,
+            self.height
+        )
+        pygame.draw.rect(screen, "Red", draw_rect)
 
     def jump(self):
-        if not self.is_jumping:  # only jump if not already jumping
+        if not self.is_jumping:
             self.velocity.y = -15 
             self.is_jumping = True
 
@@ -67,7 +70,7 @@ class Player:
         self.velocity.x -= 3
         self.position += self.velocity
         self.velocity.x = 0
-
+    
     def hit(self):
         self.hearts -= 1
         if self.hearts == 0:
@@ -77,69 +80,62 @@ class Player:
     def update(self):
         # apply gravity
         self.velocity.y += 0.8
-        
-        # store previous position for collision checks
-        old_position = pygame.Vector2(self.position.x, self.position.y)
-        
-        # apply velocity to position
         self.position += self.velocity
         
-        # boundary check (left side of world)
-        if self.position.x < 0:
-            self.position.x = 0
-        
-        # update rect position (world coordinates)
+        # update collision rect 
         self.rect.x = self.position.x
         self.rect.y = self.position.y
-
-        self.check_ground_collisions(old_position)
-        self.check_side_collisions(old_position)
-
-        self.velocity.x = 0
-
-
-    def check_ground_collisions(self, old_position):
-        # Ground check (same as before but cleaned up)
+        
+        # reset ground state
+        on_ground = False
+        
+        # check ground collisions
         for ground in grounds:
-            ground_rect = pygame.Rect(*ground)
+            ground_x = ground[0]  # Use WORLD x coordinate for collision
+            ground_y = ground[1]
+            ground_width = ground[2]
+            ground_height = ground[3]
             
-            # standing on ground logic
-            if (self.rect.bottom >= ground_rect.top and 
-                old_position.y + self.rect.height <= ground_rect.top and
-                self.rect.right > ground_rect.left and 
-                self.rect.left < ground_rect.right):
-                self.position.y = ground_rect.top - self.rect.height
-                self.velocity.y = 0
-                self.is_jumping = False
+            ground_rect = pygame.Rect(ground_x, ground_y, ground_width, ground_height)
             
-            # hitting ground from below logic
-            elif (self.rect.top <= ground_rect.bottom and 
-                  old_position.y >= ground_rect.bottom and
-                  self.rect.right > ground_rect.left and 
-                  self.rect.left < ground_rect.right):
-                self.position.y = ground_rect.bottom
-                self.velocity.y = 0
-
-    def check_side_collisions(self, old_position):
-        # Side collision check with ground
-        for ground in grounds:
-            ground_rect = pygame.Rect(*ground)
-            
-            # Moving right into a wall
-            if (self.velocity.x > 0 and  # Moving right
-                self.rect.left < ground_rect.right and
-                old_position.x + self.rect.width <= ground_rect.left and  # Wasn't colliding before
-                self.rect.bottom > ground_rect.top + 5 and  # Only collide if not just "grazing"
-                self.rect.top < ground_rect.bottom - 5):
-                self.position.x = ground_rect.left - self.rect.width
-            
-            # Moving left into a wall
-            elif (self.velocity.x < 0 and  # Moving left
-                  self.rect.right > ground_rect.left and
-                  old_position.x >= ground_rect.right and  # Wasn't colliding before
-                  self.rect.bottom > ground_rect.top + 5 and
-                  self.rect.top < ground_rect.bottom - 5):
-                self.position.x = ground_rect.right
+            # ignore other grounds if not colliding with player
+            if self.rect.colliderect(ground_rect):
+                # calculate overlap amounts
+                overlap_top = ground_rect.top - self.rect.bottom
+                overlap_bottom = ground_rect.bottom - self.rect.top
+                overlap_left = ground_rect.left - self.rect.right
+                overlap_right = ground_rect.right - self.rect.left
+                
+                # find the smallest overlap (indicates collision side)
+                overlaps = {
+                    "top": abs(overlap_top),
+                    "bottom": abs(overlap_bottom),
+                    "left": abs(overlap_left),
+                    "right": abs(overlap_right)
+                }
+                min_overlap = min(overlaps, key=overlaps.get)
+                
+                # Handle collision based on side
+                if min_overlap == "top" and self.velocity.y > 0:
+                    # user landing on ground
+                    self.position.y = ground_rect.top - self.height
+                    self.velocity.y = 0
+                    on_ground = True
+                elif min_overlap == "bottom" and self.velocity.y < 0:
+                    # hit bottom
+                    self.position.y = ground_rect.bottom
+                    self.velocity.y = 0
+                elif min_overlap == "left":
+                    # touched left side
+                    self.position.x = ground_rect.left - self.width
+                elif min_overlap == "right":
+                    # touched right side
+                    self.position.x = ground_rect.right
+        
+        self.is_jumping = not on_ground
+    
+        if self.position.x < 0:
+            self.position.x = 0
 
 player = Player()
 camera_offset_x = max(0, player.position.x - screen.get_width() // 2)
@@ -200,9 +196,9 @@ while running:
     for obstacle in obstacles:
         # Create a temporary rect that accounts for camera offset
         adjusted_obstacle_rect = obstacle.body.copy()
-        adjusted_obstacle_rect.x -= camera_offset_x
         
         if player.rect.colliderect(adjusted_obstacle_rect) and not obstacle.touched:
+            print(f"Obstacle hit at {obstacle.body.x}, {obstacle.body.y}\nPlayer Position: {player.position.xy}")
             player.hit()
             obstacle.hit()
 
