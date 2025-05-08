@@ -12,7 +12,11 @@ running = True
 dt = 0
 current_lvl = 0
 game_active = True
-
+dead = False
+# due to index (really 3)
+MAX_LVL = 2
+# time when game stopped being active
+timed = None
 
 #FONTS
 font_name = "./assets/fonts/Pixel.ttf"
@@ -45,7 +49,7 @@ with open("assets/levels.json", "r") as f:
     levels_json = json.load(f) # load entire json file into variable
 
 def level_info(num, info):
-    level = levels_json["levels"][num - 1]
+    level = levels_json["levels"][num]
     valid_info = ["start_pos", "obstacles", "goal", "ground"]
     if not (info in valid_info):
         return SyntaxError
@@ -54,6 +58,53 @@ def level_info(num, info):
 
 obstacles = [*level_info(current_lvl, "obstacles")]
 grounds = [*level_info(current_lvl, "ground")]
+
+def draw_win_screen(time, current_lvl):
+    overlay = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA).convert_alpha()
+    overlay.fill((0, 0, 0, 128)) 
+    screen.blit(overlay, (0, 0))
+
+    header_text = font_large.render(f"Congrats!", True, (255, 50, 50))
+    timer_text = font_medium.render(str(time)[3:7], True, (255, 255, 255))
+
+    header_rect = header_text.get_rect(center=(screen.get_width()//2, screen.get_height()//2 - 150))
+    timer_rect = timer_text.get_rect(center=(screen.get_width()//2, screen.get_height()//2 - 100))
+
+    screen.blit(header_text, header_rect)
+    screen.blit(timer_text, timer_rect)
+
+    # button dimensions
+    button_width = 200
+    button_height = 60
+    spacing = 40  # space between buttons
+
+    center_x = screen.get_width() // 2
+    center_y = screen.get_height() // 2
+
+    buttons = []
+
+    # Restart button - left
+    restart_rect = pygame.Rect(center_x - button_width - spacing//2, center_y + 50, button_width, button_height)
+    pygame.draw.rect(screen, (50, 50, 50), restart_rect)
+    pygame.draw.rect(screen, (255, 255, 255), restart_rect, 2)
+    restart_text = font_medium.render("Restart", True, (255, 255, 255))
+    restart_text_rect = restart_text.get_rect(center=restart_rect.center)
+    screen.blit(restart_text, restart_text_rect)
+    buttons.append(restart_rect)
+
+    # Next Level button - right (only if not on final level)
+    next_level_rect = None
+    if current_lvl < MAX_LVL:
+        next_level_rect = pygame.Rect(center_x + spacing//2, center_y + 50, button_width, button_height)
+        pygame.draw.rect(screen, (50, 50, 50), next_level_rect)
+        pygame.draw.rect(screen, (255, 255, 255), next_level_rect, 2)
+        next_text = font_medium.render("Next Level", True, (255, 255, 255))
+        next_text_rect = next_text.get_rect(center=next_level_rect.center)
+        screen.blit(next_text, next_text_rect)
+        buttons.append(next_level_rect)
+
+    return buttons
+
 
 def draw_death_screen():
     # Dark overlay
@@ -98,17 +149,17 @@ def tile_land_image(surface, tile, x, y, width):
         # crop the tile
         cropped_tile = tile.subsurface((0, 0, remainder, tile_h))
         # place the cropped tile
-        screen.blit(cropped_tile, (x + num_tiles * tile_w, y - tile_h))
+        surface.blit(cropped_tile, (x + num_tiles * tile_w, y - tile_h))
 
+goal = level_info(current_lvl, "goal")
 
 def draw_game():
     global land_img
 
     #goal draw
-    goal = level_info(current_lvl, "goal")
     x, y, width, _ = goal
-    tile_land_image(screen, land_img, goal[0], goal[1] + 35, goal[2])
-
+    x -= camera_offset_x
+    tile_land_image(screen, land_img, x, y, width)
 
     for ground in grounds:
         adjusted_ground = ground.copy()
@@ -127,13 +178,14 @@ def draw_game():
 
 class Player:
     def __init__(self, level=1):
+        self.level = level
         self.starting_point = level_info(level, "start_pos")
         self.position = pygame.Vector2(*self.starting_point)
         self.velocity = pygame.Vector2(0, 0)
         self.width, self.height = 60, 60
         self.rect = pygame.Rect(0, 0, self.width, self.height) 
         self.is_jumping = False
-        self.hearts = 3
+        self.hearts = 10
         self.has_moved = False
     
     def draw(self):
@@ -241,7 +293,7 @@ class Player:
             death_sound.set_volume(DEFAULT_VOL)
             death_sound.play()
 
-player = Player()
+player = Player(current_lvl)
 camera_offset_x = max(0, player.position.x - screen.get_width() // 2)
 
 def update_timer(time_started):
@@ -292,18 +344,43 @@ while running:
         # click event
         if event.type == pygame.MOUSEBUTTONDOWN and not game_active:
             mouse_pos = pygame.mouse.get_pos()
-            # button clicked at pos of button
-            if button_rect.collidepoint(mouse_pos):
-                # Reset game
-                game_active = True
-                timer = None
-                penalty_time = timedelta(0)
-                player = Player()  # Create new player
-                obstacles = [*level_info(current_lvl, "obstacles")]
-                # Reset obstacles 
-                obstacle_to_class()
-                camera_offset_x = max(0, player.position.x - screen.get_width() // 2)
-
+            if dead:
+                # button clicked at pos of button
+                if button_rect.collidepoint(mouse_pos):
+                    # Reset game
+                    game_active = True
+                    timer = None
+                    penalty_time = timedelta(0)
+                    player = Player(current_lvl)  # Create new player
+                    obstacles = [*level_info(current_lvl, "obstacles")]
+                    # Reset obstacles 
+                    obstacle_to_class()
+                    camera_offset_x = max(0, player.position.x - screen.get_width() // 2)
+            else:
+                for i, won_button in enumerate(won_buttons):
+                    if won_button.collidepoint(mouse_pos) and i == 0:
+                        # restart button
+                        game_active = True
+                        dead = False
+                        timer = None
+                        penalty_time = timedelta(0)
+                        player = Player(current_lvl)  # Create new player
+                        obstacles = [*level_info(current_lvl, "obstacles")]
+                        # Reset obstacles 
+                        obstacle_to_class()
+                        camera_offset_x = max(0, player.position.x - screen.get_width() // 2)
+                    elif won_button.collidepoint(mouse_pos) and i == 1:
+                        #next level
+                        current_lvl += 1
+                        game_active = True
+                        dead = False
+                        timer = None
+                        penalty_time = timedelta(0)
+                        player = Player(current_lvl)  # Create new player
+                        obstacles = [*level_info(current_lvl, "obstacles")]
+                        # Reset obstacles 
+                        obstacle_to_class()
+                        camera_offset_x = max(0, player.position.x - screen.get_width() // 2)
     keys = pygame.key.get_pressed()
 
     if game_active:
@@ -335,12 +412,20 @@ while running:
         player.update() # gravity and physics check every frame
         player.draw()
 
+        # goal collision check
+        goal_rect = pygame.Rect(*goal)
+        if player.rect.colliderect(goal_rect):
+            # user won the level
+            timed = str(datetime.now() - timer + penalty_time)
+            game_active = False
+            dead = False
+            continue
+            
+
         for obstacle in obstacles:
             adjusted_obstacle_rect = obstacle.body.copy()
             
             if player.rect.colliderect(adjusted_obstacle_rect) and not obstacle.touched:
-                print(f"Obstacle hit at {obstacle.body.x}, {obstacle.body.y}\nPlayer Position: {player.position.xy}")
-                print(timer)
                 penalty_time += timedelta(seconds=10)
                 if player.hearts - 1 <= 0:
                     death_sound.set_volume(DEFAULT_VOL)
@@ -350,13 +435,18 @@ while running:
 
         if player.hearts <= 0:
             game_active = False        
+            dead = True
     else:
         # for background purposes
         draw_UI(player)
         player.draw()
         draw_game()
         
-        button_rect = draw_death_screen()
+        if dead:
+            # user dead at level
+            button_rect = draw_death_screen()
+        else:
+            won_buttons = draw_win_screen(timed, current_lvl)
 
     pygame.display.flip()
 
