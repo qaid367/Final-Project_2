@@ -22,6 +22,8 @@ font_medium = pygame.font.Font(None, 48)  # for button text
 #SOUNDS
 death_sound = pygame.mixer.Sound("assets/sounds/death.mp3")
 hits_sound = [pygame.mixer.Sound("assets/sounds/hit_1.mp3"), pygame.mixer.Sound("assets/sounds/hit_2.mp3"), pygame.mixer.Sound("assets/sounds/hit_3.mp3")]
+# ranges from 0.0-1.0
+DEFAULT_VOL = 0.15
 
 #IMAGES
 bg_image = pygame.image.load("assets/images/background.jpg").convert_alpha()
@@ -170,6 +172,7 @@ class Player:
         hit_sound = random.choice(hits_sound)
         if self.hearts == 0:
             return
+        hit_sound.set_volume(DEFAULT_VOL)
         hit_sound.play()
 
     def update(self):
@@ -235,6 +238,7 @@ class Player:
         # falls out the map
         if self.position.y > screen.get_height() + 1000:
             self.hearts = 0
+            death_sound.set_volume(DEFAULT_VOL)
             death_sound.play()
 
 player = Player()
@@ -300,6 +304,8 @@ while running:
                 obstacle_to_class()
                 camera_offset_x = max(0, player.position.x - screen.get_width() // 2)
 
+    keys = pygame.key.get_pressed()
+
     if game_active:
         camera_offset_x = player.position.x - screen.get_width() // 2
         camera_offset_x = max(0, camera_offset_x)  # prevent left-edge overscroll
@@ -310,13 +316,12 @@ while running:
         update_timer(timer)
 
 
-        keys = pygame.key.get_pressed()
 
         if keys[pygame.K_w] or keys[pygame.K_UP] or keys[pygame.K_SPACE]:
             if player.has_moved == False:
                 timer = datetime.now()
             player.jump()
-        if keys[pygame.K_d] or keys[pygame.K_DOWN]:
+        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
             if player.has_moved == False:
                 timer = datetime.now()
             player.move_right()
@@ -338,6 +343,7 @@ while running:
                 print(timer)
                 penalty_time += timedelta(seconds=10)
                 if player.hearts - 1 <= 0:
+                    death_sound.set_volume(DEFAULT_VOL)
                     death_sound.play()
                 player.hit()
                 obstacle.hit()
@@ -346,10 +352,10 @@ while running:
             game_active = False        
     else:
         # for background purposes
-        screen.fill("purple")
+        draw_UI(player)
         player.draw()
         draw_game()
-
+        
         button_rect = draw_death_screen()
 
     pygame.display.flip()
