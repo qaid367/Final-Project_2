@@ -235,6 +235,7 @@ class Player:
         # falls out the map
         if self.position.y > screen.get_height() + 1000:
             self.hearts = 0
+            death_sound.play()
 
 player = Player()
 camera_offset_x = max(0, player.position.x - screen.get_width() // 2)
