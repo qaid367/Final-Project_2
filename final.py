@@ -64,7 +64,7 @@ def draw_win_screen(time, current_lvl):
     overlay.fill((0, 0, 0, 128)) 
     screen.blit(overlay, (0, 0))
 
-    header_text = font_large.render(f"Congrats!", True, (255, 50, 50))
+    header_text = font_large.render(f"Congrats!", True, (38, 201, 20))
     timer_text = font_medium.render(str(time)[3:7], True, (255, 255, 255))
 
     header_rect = header_text.get_rect(center=(screen.get_width()//2, screen.get_height()//2 - 150))
@@ -185,7 +185,7 @@ class Player:
         self.width, self.height = 60, 60
         self.rect = pygame.Rect(0, 0, self.width, self.height) 
         self.is_jumping = False
-        self.hearts = 10
+        self.hearts = 3
         self.has_moved = False
     
     def draw(self):
